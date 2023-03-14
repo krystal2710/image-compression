@@ -116,38 +116,48 @@ class my_k_means:
         return None
 
 def compress_im(im, k):
-    
+
     k_means = my_k_means(k = k)
     centers, num_iters, current_mse, clusters = k_means.fit(im)
     vq = {'model': k_means, 'centers': centers.astype(int), 'num_iters': num_iters, 'mse': current_mse, 'clusters':clusters}
     compressed_im = centers[clusters].astype(int)
     return compressed_im, vq
 
-def compress_rep_im(rep_imgs, img_width, img_height, k):
+
+def compress_rep_im(rep_imgs, img_width, img_height, k, type):
+    if type == 'grayscale':
+        color = 1
+    else:
+        color = 3
     compressed_imgs = []
     vqs = []
     for im in rep_imgs: 
-        im = im.reshape(img_width*img_height,3)
+        im = im.reshape(img_width*img_height,color)
         compressed_im, vq = compress_im(im, k = k)
         compressed_imgs.append(compressed_im)
         vqs.append(vq)
     return np.asarray(compressed_imgs), vqs
 
-def compressed_other_imgs(data, clusters_rep, centers_rep, rep_vqs, img_width, img_height):
-    compressed_data = np.zeros((len(data),img_width*img_height*3), dtype = int)
+def compressed_other_imgs(data, clusters_rep, centers_rep, rep_vqs, img_width, img_height, type):
+    if type == 'grayscale':
+        color = 1
+    else:
+        color = 3
+    
+    compressed_data = np.zeros((len(data),img_width*img_height*color), dtype = int)
 
     for i,j in enumerate(clusters_rep):
-        im = data[i].reshape(img_width*img_height,3)
+        im = data[i].reshape(img_width*img_height,color)
         predicted_clusters = rep_vqs[j]['model'].predict(im)
         compressed_im = rep_vqs[j]['centers'][predicted_clusters]
-        compressed_data[i,:] = compressed_im.reshape(img_width*img_height*3)
+        compressed_data[i,:] = compressed_im.reshape(img_width*img_height*color)
     return compressed_data
 
 
 def mean_squared_error(data, compressed_data):
     return np.mean((data - compressed_data)**2, axis = 1)
 
-def vq_on_diff_k(k_list, data, img_width, img_height):
+def vq_on_diff_k(k_list, data, img_width, img_height, type):
     k_rep = int(len(data)/50)
     k_means = my_k_means(k = k_rep)
     centers_rep, num_iters_rep, current_mse_rep, clusters_rep = k_means.fit(data)
@@ -156,9 +166,28 @@ def vq_on_diff_k(k_list, data, img_width, img_height):
     result = []
 
     for k in k_list:
-        compressed_rep_imgs, rep_vqs = compress_rep_im(data[representatives], img_width, img_height, k)
-        compressed_data = compressed_other_imgs(data, clusters_rep, centers_rep, rep_vqs, img_width, img_height)
+        compressed_rep_imgs, rep_vqs = compress_rep_im(data[representatives], img_width, img_height, k, type)
+        compressed_data = compressed_other_imgs(data, clusters_rep, centers_rep, rep_vqs, img_width, img_height, type)
         mse_arr = mean_squared_error(data, compressed_data)
         result.append(round(np.median(mse_arr),2))
+        print('Done with k = {}'.format(k))
     
+    return result
+
+def vq_on_diff_k_individual(k_list, data, img_width, img_height, type):
+    if type == 'grayscale':
+        color = 1
+    else:
+        color = 3
+    result = []
+
+    for k in k_list:
+        compressed_data = np.zeros((len(data),img_width*img_height*color), dtype = int)
+        for i, im in enumerate(data):
+            im = data[i].reshape(img_width*img_height,color)
+            compressed_im, vq = compress_im(im, k)
+            compressed_data[i,:] = compressed_im.reshape(img_width*img_height*color)
+        mse_arr = mean_squared_error(data, compressed_data)
+        result.append(round(np.median(mse_arr),2))
+        print('Done with k = {}'.format(k))
     return result
